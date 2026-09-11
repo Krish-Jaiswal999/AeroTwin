@@ -107,6 +107,11 @@ def compute_georef_report(project="sample_flight", output_base="data/output"):
         "and can be anchored to any known ground control point (GCP)."
     )
 
+    # Explicit availability contract: the metric scale is a motion-derived estimate
+    # until a real telemetry source or GCP calibration is wired in.
+    gps_available = False
+    scale_available = False
+
     # Camera path for web viewer
     cam_path = [{"id": i, "name": c["name"], "local_xyz": c["position"]} for i, c in enumerate(cameras)]
 
@@ -114,10 +119,14 @@ def compute_georef_report(project="sample_flight", output_base="data/output"):
         "feature": "GPS / Georeferencing",
         "cameras_registered": len(cameras),
         "scale_m_per_unit": round(scale_m_per_unit, 5),
+        "scale_available": scale_available,
+        "scale_source": "video motion estimate (not GPS-verified)",
         "trajectory_length_m": round(trajectory_length_m, 2),
         "coverage_span_m": {"x": round(float(span_m[0]), 2), "y": round(float(span_m[1]), 2), "z": round(float(span_m[2]), 2)},
         "coordinate_system": "COLMAP local (metric-consistent, not lat/lon anchored)",
-        "gps_status": georef_note,
+        "gps_status": "not_available",
+        "gps_status_message": georef_note,
+        "gps_available": gps_available,
         "camera_positions_local": cam_path[:10],  # First 10 for preview
     }
 
