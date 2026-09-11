@@ -160,7 +160,7 @@ def process_mesh_and_analytics(project_dir: Path):
                      "--output_type", "PLY"],
                     capture_output=True, text=True, timeout=120
                 )
-                if result.returncode == 0 and out_ply.exists():
+if result.returncode == 0 and out_ply.exists():
     sparse_ply = out_ply
     print(f"  ✓ Exported sparse PLY: {out_ply}")
 else:

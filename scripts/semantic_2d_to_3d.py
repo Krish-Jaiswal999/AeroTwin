@@ -281,8 +281,8 @@ def project_points(pts, R, tvec, cam, mask_shape):
         cx = params[1] if len(params) > 1 else W / 2.0
         cy = params[2] if len(params) > 2 else H / 2.0
         k = params[3] if len(params) > 3 else 0.0
-        r2 = x_n * x_n + y_n * y_n
-        factor = 1.0 + k * r2
+        r2 = np.clip(x_n * x_n + y_n * y_n, 0.0, 1e6)
+        factor = np.clip(1.0 + k * r2, -1e6, 1e6)
         u = f * x_n * factor + cx
         v = f * y_n * factor + cy
     else:
@@ -294,13 +294,16 @@ def project_points(pts, R, tvec, cam, mask_shape):
 
         # Best-effort support for a radial distortion term if present.
         k = params[4] if len(params) > 4 else 0.0
-        r2 = x_n * x_n + y_n * y_n
-        factor = 1.0 + k * r2
+        r2 = np.clip(x_n * x_n + y_n * y_n, 0.0, 1e6)
+        factor = np.clip(1.0 + k * r2, -1e6, 1e6)
         u = fx * x_n * factor + cx
         v = fy * y_n * factor + cy
 
-    u_m = (u * (mW / W)).astype(np.int32)
-    v_m = (v * (mH / H)).astype(np.int32)
+    u = np.nan_to_num(u, nan=0.0, posinf=1e6, neginf=-1e6)
+    v = np.nan_to_num(v, nan=0.0, posinf=1e6, neginf=-1e6)
+
+    u_m = np.clip(u * (mW / W), -1e6, 1e6).astype(np.int32)
+    v_m = np.clip(v * (mH / H), -1e6, 1e6).astype(np.int32)
     in_front = z > 0.05
     in_frame = in_front & (u_m >= 0) & (u_m < mW) & (v_m >= 0) & (v_m < mH)
     return in_frame, u_m, v_m, z

@@ -682,8 +682,6 @@ def load_metric_scale(job_dir: Path) -> tuple:
                     available = data.get("gps_status") == "available"
 
                 source = data.get("scale_source") or data.get("source") or "metric estimate"
-                if not bool(available):
-                    source = f"{source} (not GPS-verified)"
                 return scale, str(source), bool(available)
             except Exception:
                 pass
