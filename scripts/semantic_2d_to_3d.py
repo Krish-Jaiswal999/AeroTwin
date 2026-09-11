@@ -267,32 +267,38 @@ def project_points(pts, R, tvec, cam, mask_shape):
     W, H = cam["width"], cam["height"]
     params = cam["params"]
     model = cam.get("model", "SIMPLE_RADIAL")
-    f = params[0]
-    if model in ("SIMPLE_PINHOLE", "SIMPLE_RADIAL", "SIMPLE_RADIAL_FISHEYE"):
-        cx = params[1] if len(params) > 1 else W / 2.0
-        cy = params[2] if len(params) > 2 else H / 2.0
-    else:
-        # PINHOLE / OPENCV: fx, fy, cx, cy
-        f = params[0]
-        fy = params[1] if len(params) > 1 else params[0]
-        cx = params[2] if len(params) > 2 else W / 2.0
-        cy = params[3] if len(params) > 3 else H / 2.0
-        p_cam = (pts @ R.T) + tvec
-        z = p_cam[:, 2]
-        mH, mW = mask_shape
-        u = f * p_cam[:, 0] / np.clip(z, 1e-6, None) + cx
-        v = fy * p_cam[:, 1] / np.clip(z, 1e-6, None) + cy
-        u_m = (u * (mW / W)).astype(np.int32)
-        v_m = (v * (mH / H)).astype(np.int32)
-        in_front = z > 0.05
-        in_frame = in_front & (u_m >= 0) & (u_m < mW) & (v_m >= 0) & (v_m < mH)
-        return in_frame, u_m, v_m, z
 
     p_cam = (pts @ R.T) + tvec
     z = p_cam[:, 2]
+    z_safe = np.clip(z, 1e-6, None)
+    x_n = p_cam[:, 0] / z_safe
+    y_n = p_cam[:, 1] / z_safe
+
     mH, mW = mask_shape
-    u = f * p_cam[:, 0] / np.clip(z, 1e-6, None) + cx
-    v = f * p_cam[:, 1] / np.clip(z, 1e-6, None) + cy
+
+    if model in ("SIMPLE_PINHOLE", "SIMPLE_RADIAL", "SIMPLE_RADIAL_FISHEYE"):
+        f = params[0]
+        cx = params[1] if len(params) > 1 else W / 2.0
+        cy = params[2] if len(params) > 2 else H / 2.0
+        k = params[3] if len(params) > 3 else 0.0
+        r2 = x_n * x_n + y_n * y_n
+        factor = 1.0 + k * r2
+        u = f * x_n * factor + cx
+        v = f * y_n * factor + cy
+    else:
+        # PINHOLE / OPENCV-style models can carry extra distortion terms.
+        fx = params[0]
+        fy = params[1] if len(params) > 1 else params[0]
+        cx = params[2] if len(params) > 2 else W / 2.0
+        cy = params[3] if len(params) > 3 else H / 2.0
+
+        # Best-effort support for a radial distortion term if present.
+        k = params[4] if len(params) > 4 else 0.0
+        r2 = x_n * x_n + y_n * y_n
+        factor = 1.0 + k * r2
+        u = fx * x_n * factor + cx
+        v = fy * y_n * factor + cy
+
     u_m = (u * (mW / W)).astype(np.int32)
     v_m = (v * (mH / H)).astype(np.int32)
     in_front = z > 0.05

@@ -337,21 +337,15 @@ def main():
 
     t0 = time.time()
 
-    # CRITICAL: Run on frames/ (COLMAP-registered names) if available
-    # These names must match what COLMAP's images.txt records
-    if frames_dir.exists():
-        print(f"\n  Processing frames/ directory (COLMAP-aligned)...")
+    # Mirror COLMAP's input selection: prefer keyframes/ when present because
+    # that is the directory COLMAP will register, then fall back to frames/.
+    if keyframes_dir.exists() and any(keyframes_dir.glob("*.jpg")):
+        print(f"\n  Processing keyframes/ directory (COLMAP-preferred source)...")
+        run_semantic_segmentation(keyframes_dir, project_dir, keyframes_dir=keyframes_dir)
+        print()
+    elif frames_dir.exists():
+        print(f"\n  Processing frames/ directory (fallback source)...")
         run_semantic_segmentation(frames_dir, project_dir, keyframes_dir=None)
-        print()
-
-    # Also run on keyframes/ (for display thumbnails), but don't duplicate if same files
-    if keyframes_dir.exists() and frames_dir.exists():
-        print(f"\n  Processing keyframes/ directory (visual display)...")
-        run_semantic_segmentation(keyframes_dir, project_dir, keyframes_dir=keyframes_dir)
-        print()
-    elif keyframes_dir.exists():
-        # No frames/ — use keyframes as the primary source
-        run_semantic_segmentation(keyframes_dir, project_dir, keyframes_dir=keyframes_dir)
         print()
 
     # Run dynamic filtering (always on frames)
