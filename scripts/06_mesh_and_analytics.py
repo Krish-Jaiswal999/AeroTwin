@@ -161,11 +161,10 @@ def process_mesh_and_analytics(project_dir: Path):
                     capture_output=True, text=True, timeout=120
                 )
                 if result.returncode == 0 and out_ply.exists():
-                    sparse_ply = out_ply
-                    print(f"  ✓ Exported sparse PLY: {out_ply}")
-                        break
-                    else:
-                        print(f"  COLMAP PLY export failed: {result.stderr[-200:]}")
+    sparse_ply = out_ply
+    print(f"  ✓ Exported sparse PLY: {out_ply}")
+else:
+    print(f"  COLMAP PLY export failed: {result.stderr[-200:]}")
 
     # Count points
     if dense_ply:

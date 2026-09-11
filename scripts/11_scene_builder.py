@@ -657,7 +657,8 @@ def extract_real_water(pts_three: np.ndarray, labels: np.ndarray,
 # ─── Metric Scale Loader ───────────────────────────────────────────────────────
 
 def load_metric_scale(job_dir: Path) -> tuple:
-    """Return (scale, source, available). Never invent a default meter scale."""
+    """Return (scale, source, available). Preserve the scale estimate while
+    exposing whether it is explicitly available/validated."""
     candidates = [
         job_dir / "georef_report.json",
         job_dir / job_dir.name / "georef_report.json",
@@ -667,15 +668,26 @@ def load_metric_scale(job_dir: Path) -> tuple:
             try:
                 with open(georef, encoding="utf-8") as f:
                     data = json.load(f)
-                if not data.get("scale_available"):
-                    continue
                 scale = data.get("scale_m_per_unit")
-                source = data.get("scale_source") or data.get("source") or "validated reference"
-                if scale and float(scale) > 0:
-                    return float(scale), str(source), True
+                if scale is None:
+                    continue
+                scale = float(scale)
+                if scale <= 0:
+                    continue
+
+                available = data.get("scale_available")
+                if available is None:
+                    available = data.get("gps_available")
+                if available is None:
+                    available = data.get("gps_status") == "available"
+
+                source = data.get("scale_source") or data.get("source") or "metric estimate"
+                if not bool(available):
+                    source = f"{source} (not GPS-verified)"
+                return scale, str(source), bool(available)
             except Exception:
                 pass
-    return 1.0, "relative (no validated metric reference)", False
+    return 1.0, "relative fallback (no validated metric reference; using unit scale)", False
 
 
 def ransac_ground_plane(pts: np.ndarray, n_iter: int = 250, inlier_frac: float = 0.08):
@@ -880,7 +892,7 @@ def build_production_scene(job_dir: Path, output_dir: Path, max_web_pts: int = 8
 
     # 4. Metric Scaling & Conversion to Three.js coordinate system (Y-up, Centered)
     print("\n[4/8] Converting to Three.js standard coordinates (Y-up, metric-scaled)...")
-    metric_scale, scale_source, _scale_avail = load_metric_scale(job_dir)
+    metric_scale, scale_source, scale_avail = load_metric_scale(job_dir)
     scale = float(metric_scale) if metric_scale > 0.1 else 2.5
     print(f"  Metric scale: {scale:.3f} m/unit ({scale_source})")
 
@@ -895,14 +907,18 @@ def build_production_scene(job_dir: Path, output_dir: Path, max_web_pts: int = 8
     raw_elev = (z_ground_base - pts_raw[:, 2]) * scale
     pts_three[:, 1] = np.clip(raw_elev, -2.0, 45.0)
 
+    # Keep the original metric-scaled reconstruction for structural extraction.
+    # The later amplified cloud is only for visualization density.
+    real_pts_three = pts_three.copy()
+    real_labels = labels.copy()
     ground_y = 0.0
 
     # 5. Extract Real Structures (Houses, Trees, Roads, Water)
     print("\n[5/8] Extracting real 3D structures from metric-scaled points...")
-    houses = extract_real_houses(pts_three, labels)
-    trees  = extract_real_trees(pts_three, labels)
-    roads  = extract_real_roads(pts_three, labels)
-    water  = extract_real_water(pts_three, labels)
+    houses = extract_real_houses(real_pts_three, real_labels)
+    trees  = extract_real_trees(real_pts_three, real_labels)
+    roads  = extract_real_roads(real_pts_three, real_labels)
+    water  = extract_real_water(real_pts_three, real_labels)
 
     print(f"  ✓ Extracted houses:    {len(houses)} residential buildings")
     print(f"  ✓ Extracted trees:     {len(trees)} foliage clusters")
@@ -940,21 +956,20 @@ def build_production_scene(job_dir: Path, output_dir: Path, max_web_pts: int = 8
     rgb_sem = np.array([SEMANTIC_RGB[int(l)] for l in lbl_down], dtype=np.uint8)
 
     # ── Point Amplification: expand sparse cloud for visual density ──
-    print(f"\n[6b/8] Amplifying point cloud for visual density...")
+    print(f"\n[6b/8] Preparing display point cloud for visual density...")
     target_display = max(max_web_pts, 250_000)
-    if len(pts_down) < target_display:
-        pts_amp, rgb_amp_web, lbl_amp = amplify_point_cloud(pts_down, rgb_web, lbl_down, target_display)
-        _, rgb_amp_sem, lbl_amp_sem = amplify_point_cloud(pts_down, rgb_sem, lbl_down, target_display)
+    pts_amp, rgb_amp_web, lbl_amp = amplify_point_cloud(pts_down, rgb_web, lbl_down, target_display)
+    _, rgb_amp_sem, lbl_amp_sem = amplify_point_cloud(pts_down, rgb_sem, lbl_down, target_display)
+
+    if len(pts_amp) > len(pts_down):
         print(f"  Display cloud: {len(pts_amp):,} pts (amplified from {len(pts_down):,} real)")
-        pts_down_final = pts_amp
-        rgb_web_final  = rgb_amp_web
-        rgb_sem_final  = rgb_amp_sem
-        lbl_down_final = lbl_amp
     else:
-        pts_down_final = pts_down
-        rgb_web_final  = rgb_web
-        rgb_sem_final  = rgb_sem
-        lbl_down_final = lbl_down
+        print(f"  Display cloud: {len(pts_amp):,} pts (already sufficient; no amplification needed)")
+
+    pts_down_final = pts_amp
+    rgb_web_final  = rgb_amp_web
+    rgb_sem_final  = rgb_amp_sem
+    lbl_down_final = lbl_amp
 
     # 7. Reconstructed Camera Flight Trajectory in Three.js coordinates
     print("\n[7/8] Converting flight path trajectory...")
@@ -974,7 +989,8 @@ def build_production_scene(job_dir: Path, output_dir: Path, max_web_pts: int = 8
 
     # 8. Metric scale & packaging
     print("\n[8/8] Packaging digital twin scene package...")
-    calibrated = "Auto" not in scale_source and scale > 0
+    calibrated = bool(scale_avail)
+    scale_display_label = "Calibrated" if calibrated else "Estimated — not GPS-verified"
 
     sem_dist = {}
     total_lbl = max(len(lbl_down_final), 1)
@@ -1014,7 +1030,7 @@ def build_production_scene(job_dir: Path, output_dir: Path, max_web_pts: int = 8
             "value": round(scale, 3),
             "calibrated": calibrated,
             "source": scale_source,
-            "display": f"{scale:.3f} m/unit (Metric Calibrated)",
+            "display": f"{scale:.3f} m/unit ({scale_display_label})",
         },
         "cameras": {
             "registered": len(cleaned_images),
