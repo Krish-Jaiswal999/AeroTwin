@@ -57,7 +57,7 @@ AeroTwin/
 
 ## Team
 - Member 1: 3D / Reconstruction (COLMAP, Open3D, georeferencing)
-- Member 2: AI / Computer Vision (keyframe selection, YOLO, segmentation)
+- Member 2: AI / Computer Vision (keyframe selection, segmentation, semantic filtering)
 - Member 3: Frontend / 3D UI (React, Three.js, measurements)
 - Member 4: Backend / Integration (FastAPI, pipeline, benchmarking)
 
