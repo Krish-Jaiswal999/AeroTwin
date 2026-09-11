@@ -1,7 +1,24 @@
 import numpy as np
 import sys
 sys.path.append('.')
-from scripts.test_multiview import roof_pts
+from scripts.test_multiview import pts, labels
+
+# Class ids (see scripts/test_multiview.py): 1 = Road/Pavement, 2 = House/Roof
+roof_pts = pts[labels == 2]
+ground_pts = pts[labels == 1]
+
+# Global ground reference (fallback for lots with no nearby road points).
+# Use a low percentile rather than min() to stay robust to outlier/noise points.
+if len(ground_pts) >= 10:
+    global_ground_z = float(np.percentile(ground_pts[:, 2], 5))
+else:
+    # No classified ground points at all — fall back to the low end of all points
+    global_ground_z = float(np.percentile(pts[:, 2], 5))
+
+GROUND_SEARCH_RADIUS = 30.0   # m, how far to look for local ground points around a lot
+MIN_LOCAL_GROUND_PTS = 8      # need at least this many nearby ground points to trust a local estimate
+MIN_HOUSE_HEIGHT_M = 2.5      # sanity floor (garden shed / single low storey)
+MAX_HOUSE_HEIGHT_M = 25.0     # sanity ceiling (small apartment block) — clips bad geometry, doesn't invent it
 
 bin_size = 12.0
 xmin, xmax = roof_pts[:, 0].min(), roof_pts[:, 0].max()
@@ -40,8 +57,21 @@ for px, py, cnt in filtered_peaks:
         d = float(lot_pts[:, 1].max() - lot_pts[:, 1].min())
         w = round(max(14.0, min(32.0, w)), 1)
         d = round(max(14.0, min(32.0, d)), 1)
-        # Height: realistic residential height (1 to 2 stories, ~5.5m - 8.5m)
-        h = round(float(np.random.uniform(5.5, 8.5)), 1)
+
+        # Height: derived from real geometry — roof elevation minus local ground
+        # elevation, not a random guess.
+        roof_top_z = float(np.percentile(lot_pts[:, 2], 95))  # robust "top of roof"
+
+        ground_dists = np.hypot(ground_pts[:, 0] - px, ground_pts[:, 1] - py) if len(ground_pts) else np.array([])
+        local_ground_pts = ground_pts[ground_dists < GROUND_SEARCH_RADIUS] if len(ground_pts) else np.empty((0, 3))
+        if len(local_ground_pts) >= MIN_LOCAL_GROUND_PTS:
+            ground_z = float(np.percentile(local_ground_pts[:, 2], 25))
+        else:
+            ground_z = global_ground_z
+
+        h_raw = roof_top_z - ground_z
+        h = round(float(np.clip(h_raw, MIN_HOUSE_HEIGHT_M, MAX_HOUSE_HEIGHT_M)), 1)
+
         houses.append({
             'cx': round(px, 1),
             'cy': round(py, 1),
