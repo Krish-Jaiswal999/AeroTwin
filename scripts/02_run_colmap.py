@@ -225,8 +225,8 @@ def run_sparse_reconstruction(colmap_exe, project_dir, frames_dir, config):
         "image_path": str(frames_dir),
         "ImageReader.camera_model": fe_config.get("image_reader_camera_model", "SIMPLE_RADIAL"),
         "ImageReader.single_camera": "1",
-        "FeatureExtraction.use_gpu": "1" if fe_config.get("use_gpu", True) else "0",
-        "FeatureExtraction.max_image_size": fe_config.get("max_image_size", 1600),
+        "SiftExtraction.use_gpu": "1" if fe_config.get("use_gpu", True) else "0",
+        "SiftExtraction.max_image_size": fe_config.get("max_image_size", 1600),
         "SiftExtraction.max_num_features": fe_config.get("max_num_features", 8192),
     }
     success, t = run_colmap_command(colmap_exe, "feature_extractor", fe_args, "Feature Extraction (SIFT)")
@@ -240,14 +240,14 @@ def run_sparse_reconstruction(colmap_exe, project_dir, frames_dir, config):
         match_command = "sequential_matcher"
         match_args = {
             "database_path": str(database_path),
-            "FeatureMatching.use_gpu": "1" if fm_config.get("use_gpu", True) else "0",
+            "SiftMatching.use_gpu": "1" if fm_config.get("use_gpu", True) else "0",
             "SequentialMatching.overlap": fm_config.get("sequential_overlap", 10),
         }
     else:
         match_command = "exhaustive_matcher"
         match_args = {
             "database_path": str(database_path),
-            "FeatureMatching.use_gpu": "1" if fm_config.get("use_gpu", True) else "0",
+            "SiftMatching.use_gpu": "1" if fm_config.get("use_gpu", True) else "0",
         }
     
     success, t = run_colmap_command(
@@ -393,6 +393,22 @@ def export_sparse_ply(colmap_exe, sparse_dir, output_ply):
     return success
 
 
+def reset_project_outputs(project_dir: Path):
+    """Remove previous COLMAP artifacts so reruns do not inherit stale state."""
+    stale_paths = [
+        project_dir / "database.db",
+        project_dir / "sparse",
+        project_dir / "dense",
+        project_dir / "sparse_pointcloud.ply",
+        project_dir / "colmap_report.json",
+    ]
+    for stale in stale_paths:
+        if stale.is_dir():
+            shutil.rmtree(stale)
+        elif stale.exists():
+            stale.unlink()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="AeroTwin: Run COLMAP 3D reconstruction on extracted frames"
@@ -441,16 +457,29 @@ def main():
     # Paths
     project_dir = Path(args.output_base) / args.project
     frames_dir = project_dir / "frames"
-    
+    keyframes_dir = project_dir / "keyframes"
+
+    # Remove stale COLMAP artifacts so reruns start from a clean slate.
+    reset_project_outputs(project_dir)
+
+    # Prefer selected keyframes for SfM when they exist; otherwise fall back to all extracted frames.
+    frame_files = list(frames_dir.glob("*.jpg")) + list(frames_dir.glob("*.png"))
+    keyframe_files = list(keyframes_dir.glob("*.jpg")) + list(keyframes_dir.glob("*.png"))
+    if keyframe_files:
+        frames_dir = keyframes_dir
+        frame_files = keyframe_files
+        print(f"  Using selected keyframes from {frames_dir}")
+    else:
+        print(f"  Using all extracted frames from {frames_dir}")
+
     if not frames_dir.exists():
         print(f"ERROR: Frames directory not found: {frames_dir}")
         print(f"Run 01_extract_frames.py first!")
         sys.exit(1)
-    
+
     # Count frames
-    frame_files = list(frames_dir.glob("*.jpg")) + list(frames_dir.glob("*.png"))
     num_frames = len(frame_files)
-    
+
     print(f"\n{'='*60}")
     print(f"  AeroTwin — COLMAP 3D Reconstruction")
     print(f"{'='*60}")

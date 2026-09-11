@@ -14,6 +14,7 @@ Output:
 
 import argparse
 import os
+import shutil
 import sys
 import time
 import json
@@ -84,8 +85,11 @@ def extract_frames(video_path, output_dir, config):
     print(f"  Blur thresh: {blur_threshold}")
     print(f"{'='*60}")
     
-    # Create output directory
-    os.makedirs(output_dir, exist_ok=True)
+    # Create a clean output directory so reruns do not retain stale frame files
+    output_dir = Path(output_dir)
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Statistics
     stats = {
