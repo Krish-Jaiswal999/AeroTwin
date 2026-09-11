@@ -2,6 +2,8 @@
   "feature": "GPS / Georeferencing",
   "cameras_registered": 260,
   "scale_m_per_unit": 1.08299,
+  "scale_available": true,
+  "scale_source": "video-derived motion estimate (assumed drone speed 2.5 m/s at 15 fps)",
   "trajectory_length_m": 338940.52,
   "coverage_span_m": {
     "x": 19562.33,
@@ -9,7 +11,9 @@
     "z": 337762.71
   },
   "coordinate_system": "COLMAP local (metric-consistent, not lat/lon anchored)",
-  "gps_status": "GPS metadata NOT present in this video file. To enable true lat/lon georeferencing, provide a DJI telemetry SRT file or a GPX track alongside the video. The local coordinate system is metric-consistent and can be anchored to any known ground control point (GCP).",
+  "gps_status": "not_available",
+  "gps_available": false,
+  "gps_status_message": "GPS metadata NOT present in this video file. To enable true lat/lon georeferencing, provide a DJI telemetry SRT file or a GPX track alongside the video. The local coordinate system is metric-consistent and can be anchored to any known ground control point (GCP).",
   "camera_positions_local": [
     {
       "id": 0,

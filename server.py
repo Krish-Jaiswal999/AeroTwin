@@ -372,7 +372,10 @@ def get_job_results(job_id):
         reg_rate = 0.0
 
     # Georeferencing
-    gps_available = bool(georef_report.get('gps_status') == 'available')
+    gps_available = bool(
+        georef_report.get('gps_available')
+        or georef_report.get('gps_status') == 'available'
+    )
     scale = georef_report.get('scale_m_per_unit', None)
 
     result = {

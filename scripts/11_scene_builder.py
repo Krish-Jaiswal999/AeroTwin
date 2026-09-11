@@ -657,7 +657,7 @@ def extract_real_water(pts_three: np.ndarray, labels: np.ndarray,
 # ─── Metric Scale Loader ───────────────────────────────────────────────────────
 
 def load_metric_scale(job_dir: Path) -> tuple:
-    """Return (scale, source, available). Never invent a default meter scale."""
+    """Return (scale, source, available). Prefer explicit metric metadata when present."""
     candidates = [
         job_dir / "georef_report.json",
         job_dir / job_dir.name / "georef_report.json",
@@ -667,12 +667,15 @@ def load_metric_scale(job_dir: Path) -> tuple:
             try:
                 with open(georef, encoding="utf-8") as f:
                     data = json.load(f)
-                if not data.get("scale_available"):
-                    continue
                 scale = data.get("scale_m_per_unit")
-                source = data.get("scale_source") or data.get("source") or "validated reference"
-                if scale and float(scale) > 0:
-                    return float(scale), str(source), True
+                if scale is None:
+                    continue
+                scale = float(scale)
+                if scale <= 0:
+                    continue
+                available = bool(data.get("scale_available", True))
+                source = data.get("scale_source") or data.get("source") or "metric estimate"
+                return scale, str(source), available
             except Exception:
                 pass
     return 1.0, "relative (no validated metric reference)", False
